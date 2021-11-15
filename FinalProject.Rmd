@@ -38,6 +38,49 @@ animated[sample(1:nrow(animated), size = 6)]
 
 
 ```{r}
+# Re-scale the time code so that we can compare rise and fall of the movie
+rescale <- function(x){(x-min(x))/(max(x)-min(x))}
+animated[, c("startScale", "endScale") := .(rescale(start), rescale(end))]
+
+# Create a `song` column and set it to False
+animated[, song := FALSE]
+
+# Some movies have clearly marked lines that are in song
+animated[movie %in% c("Aladdin", "Beauty", "Sleeping", "Mermaid"), 
+         song := grepl("(<\\/?i>)|(♫)|(\\{\\\\i1?\\})", 
+                       subtitle)][
+           , subtitle := gsub("(<\\/?i>)|(♫)|(\\[Singing\\])|(\\{\\\\i1?\\})", 
+                              "", 
+                              subtitle)]
+
+
+
+# Brave lines are not in song
+animated[movie %in% c("Brave", "Tangled"), 
+         subtitle := gsub("(<i>)|(<\\/i>)|(♫)", 
+                          "", 
+                          subtitle)]
+
+# These lines are in song
+animated[movie == "Cinderella" & 
+           n %in% c(54:66, 312:332, 432:452, 479:486, 488, 492:494, 545:546, 548, 
+                    550, 552:553, 583:599, 662:667, 723:737, 1034:1038), 
+         song := TRUE]
+animated[movie == "Moana" & 
+           n %in% c(75:121, 315:329, 504:566, 231:271, 872:892, 900:941, 
+                    1136:1159, 1190:1196), 
+         song := TRUE]
+animated[movie == "Mulan" & 
+           n %in% c(52:55,  58:61, 65:85, 89:107, 133:154, 449:492 ,585:618, 
+                    760:764), 
+         song := TRUE]
+
+# Sample some lines to see the changes
+animated[][sample(1:.N, size = 6)]
+```
+
+
+```{r}
 # get sentiments now so we don't have to keep doing it later
 afinn <- get_sentiments("afinn")
 bing <- get_sentiments("bing")
@@ -84,7 +127,6 @@ aniNrcLineWider <- aniNrcWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
   mutate(across(unique(nrc$sentiment), ~ifelse(is.na(.x), FALSE, TRUE))) %>%
   data.table()
 aniNrcLineWider[sample(1:nrow(aniNrcLineWider), size = 6)]
-
 # I spent so much time on this but made it better above :(
 # it also showcases the some of the tidyverse version of the nonsense above
 # %>%
@@ -96,6 +138,26 @@ aniNrcLineWider[sample(1:nrow(aniNrcLineWider), size = 6)]
 #             by = "groupID") %>%
 #   select(movie, n, start, end, unique(nrc$sentiment)) %>%
 #   arrange(movie, n)
+```
+
+```{r}
+# by line
+aniAfinnWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
+  group_by(movie, song, groupID) %>%
+  summarise(value = sum(value)) %>%
+  ggplot() +
+  geom_bar(aes(x = movie, y = value, fill = song), color = "black", stat = "identity", position = "dodge") + 
+  ylim(-15, 15) +
+  geom_hline(yintercept = 0, size = 2) +
+  coord_flip()
+
+# by word
+aniAfinnWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
+  ggplot() +
+  geom_bar(aes(x = movie, y = value, fill = song), color = "black", stat = "identity", position = "dodge") + 
+  ylim(-5, 5) +
+  geom_hline(yintercept = 0, size = 2) +
+  coord_flip()
 ```
 
 
