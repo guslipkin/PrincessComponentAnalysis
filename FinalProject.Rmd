@@ -101,9 +101,12 @@ animated[][sample(1:.N, size = 6)]
 
 ```{r}
 # get sentiments now so we don't have to keep doing it later
-afinn <- get_sentiments("afinn")
-bing <- get_sentiments("bing")
-nrc <- get_sentiments("nrc")
+afinn <- data.table(get_sentiments("afinn"))
+bing <- data.table(get_sentiments("bing"))
+nrc <- data.table(get_sentiments("nrc"))
+
+nrcSentiments <- unique(nrc$sentiment)
+nrcSentimentsNoPosNeg <- nrcSentiments[-3][-6]
 ```
 
 
@@ -112,18 +115,18 @@ nrc <- get_sentiments("nrc")
 # each word is on its own row
 aniAfinnWordLonger <- animated %>%
   unnest_tokens(word, subtitle) %>%
-  inner_join(afinn, by = "word")
+  .[afinn, on = "word", nomatch = 0]
 aniAfinnWordLonger[sample(1:nrow(aniAfinnWordLonger), size = 6)]
 
 aniBingWordLonger <- animated %>%
   unnest_tokens(word, subtitle) %>%
-  inner_join(bing, by = "word")
+  .[bing, on = "word", nomatch = 0]
 aniBingWordLonger[sample(1:nrow(aniBingWordLonger), size = 6)]
 
 # in this case, words can be repeated if they have more than one sentiment
 aniNrcWordLonger <- animated %>%
   unnest_tokens(word, subtitle) %>%
-  inner_join(nrc, by = "word")
+  .[nrc, on = "word", nomatch = 0]
 aniNrcWordLonger[sample(1:nrow(aniNrcWordLonger), size = 6)]
   
 # this version is .001 seconds slower...
@@ -132,7 +135,7 @@ aniNrcWordLonger[sample(1:nrow(aniNrcWordLonger), size = 6)]
 #   select(-c(word)) %>%
 #   pivot_wider(names_from = sentiment, values_from = 1, values_fn = length) %>%
 #   arrange(movie, start) %>%
-#   mutate(across(unique(nrc$sentiment), ~ifelse(is.na(.x), FALSE, TRUE))) %>%
+#   mutate(across(nrcSentiments, ~ifelse(is.na(.x), FALSE, TRUE))) %>%
 #   data.table()
 # aniNrcLineWider[sample(1:nrow(aniNrcLineWider), size = 6)]
 
@@ -143,7 +146,7 @@ aniNrcLineWider <- aniNrcWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
   .[, !c("word")] %>%
   pivot_wider(names_from = sentiment, values_from = 1, values_fn = length) %>%
   setorderv(c("movie", "start")) %>%
-  mutate(across(unique(nrc$sentiment), ~ifelse(is.na(.x), FALSE, TRUE))) %>%
+  mutate(across(nrcSentiments, ~ifelse(is.na(.x), FALSE, TRUE))) %>%
   data.table()
 aniNrcLineWider[sample(1:nrow(aniNrcLineWider), size = 6)]
 # I spent so much time on this but made it better above :(
@@ -155,7 +158,7 @@ aniNrcLineWider[sample(1:nrow(aniNrcLineWider), size = 6)]
 #               select(-c(n, word, sentiment)) %>%
 #               unique(),
 #             by = "groupID") %>%
-#   select(movie, n, start, end, unique(nrc$sentiment)) %>%
+#   select(movie, n, start, end, nrcSentiments) %>%
 #   arrange(movie, n)
 ```
 
@@ -165,7 +168,7 @@ tmp <- aniNrcWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
   .[, !c("word")] %>%
   pivot_wider(names_from = sentiment, values_from = 1, values_fn = length) %>%
   rowwise(groupID) %>%
-  mutate(totalFeeling = sum(c_across(unique(nrc$sentiment)), na.rm = TRUE)) %>%
+  mutate(totalFeeling = sum(c_across(nrcSentiments), na.rm = TRUE)) %>%
   ungroup() %>%
   select(startScale, movie, totalFeeling) %>%
   group_by(startScale, movie) %>%
@@ -191,34 +194,54 @@ rm(test)
 
 ```{r}
 # by line
-tmp <- aniAfinnWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
+tmp1 <- aniAfinnWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
   group_by(movie, song, groupID) %>%
   summarise(value = sum(value)) %>%
   arrange(movie) %>%
   mutate(movie = factor(movie, levels = movieData$movie),
          movColors = movieColors[movie],
-         songColors = ifelse(song, "black", "white"),
          song = ifelse(song, "Sung", "Spoken")) %>%
-  select(movie, value, song, movColors, songColors) 
+  select(movie, song, groupID, value, movColors)
+
+typeof(movieColors["Aladdin"])
+
+# for some reason a data.table style mutate or select breaks this
+tmp2 <- aniAfinnWordLonger %>%
+  .[, groupID := .GRP, by = list(n, movie)] %>%
+  .[, .(value = sum(value)), by = list(movie, song, groupID)] %>%
+  mutate(movie = factor(movie, levels = movieData$movie),
+         movColors = movieColors[movie],
+         song = ifelse(song, "Sung", "Spoken")) %>%
+  .[order(movie)]
+
+all_equal(tmp2, tmp1)
+
+tmp <- tmp1
 tmp %>%
   ggplot() +
   geom_violin(aes(x = song, y = value, linetype = song, fill = movie), position = "dodge") + 
   ylim(min(tmp$value), max(tmp$value)) +
-  # ylim(-9, 9) +
   geom_hline(yintercept = 0, size = .5) +
   labs(title = "Variation in positive and negative emotions of lines by type") +
   theme(legend.position = "none") +
   facet_wrap(~movie) +
   scale_fill_manual(values = tmp$movColors[order(tmp$movie)])
 
+
 # by word
+# tmp <- aniAfinnWordLonger %>%
+#   arrange(movie) %>%
+#   mutate(movie = factor(movie, levels = movieData$movie),
+#          movColors = movieColors[movie],
+#          song = ifelse(song, "Sung", "Spoken")) %>%
+#   select(movie, value, song, movColors, songColors)
+
 tmp <- aniAfinnWordLonger %>%
-  arrange(movie) %>%
-  mutate(movie = factor(movie, levels = movieData$movie),
-         movColors = movieColors[movie],
-         songColors = ifelse(song, "black", "white"),
-         song = ifelse(song, "Sung", "Spoken")) %>%
-  select(movie, value, song, movColors, songColors)
+  .[order(movie)] %>%
+  .[, ':='(movie = factor(movie, levels = movieData$movie),
+                              movColors = movieColors[movie],
+                              song = ifelse(song, "Sung", "Spoken"))] %>%
+  .[, .(movie, value, song, movColors)]
 tmp %>%
   ggplot() +
   geom_violin(aes(x = song, y = value, linetype = song, fill = movie), position = "dodge") + 
@@ -235,45 +258,83 @@ tmp %>%
 # gets sentiment scores for each movie
 
 # adds up all the individual sentiments for each movie
-aniAfinnWordLonger %>%
-  group_by(movie) %>%
-  summarise(totalSentiment = sum(value)) %>%
-  arrange(desc(totalSentiment))
+aniAfinnWordLonger[, 
+                   .(totalSentiment = sum(value)), 
+                   by = movie][order(desc(totalSentiment))] %>%
+  print()
 
 # gets sentiments, counts the number of positive and negative per movie,
 #   then gets a total by finding the difference
-aniBingWordLonger %>%
-  group_by(movie) %>%
-  count(sentiment) %>%
+unique(aniBingWordLonger[,
+                         n := .N,
+                         by = .(movie, sentiment)][,
+                                                   .(movie, sentiment,
+                                                     n)][order(movie, sentiment)]) %>%
   pivot_wider(names_from = sentiment, id_cols = c("movie", "n"), values_from = n) %>%
-  mutate(totalSentiment = positive - negative) %>%
-  arrange(desc(totalSentiment))
+  data.table() %>%
+  .[, totalSentiment := positive - negative] %>%
+  .[order(desc(totalSentiment))] %>%
+  print()
 
 # counts the number of each sentiment in each movie
 # also creates a new column that finds the difference between `negative` and `positive`
 #   and adds up the total number of sentiments (not including `negative` and `positive` 
 #   to create `totalFeeling`
-aniNrcMovieWider <- aniNrcWordLonger %>%
-  group_by(movie) %>%
-  count(sentiment) %>%
-  arrange(movie, sentiment) %>%
+
+# some proof that data.table can be wicked fast
+# rbenchmark::benchmark(
+#   "tidy" = {
+#     aniNrcMovieWider <- aniNrcWordLonger %>%
+#       group_by(movie) %>%
+#       count(sentiment) %>%
+#       arrange(movie, sentiment) %>%
+#       pivot_wider(
+#         names_from = sentiment,
+#         id_cols = c("movie", "n"),
+#         values_from = n
+#       ) %>%
+#       mutate(totalSentiment = positive - negative) %>%
+#       rowwise() %>%
+#       mutate(totalFeeling = sum(c_across(c(2:6, 9:11)))) %>%
+#       arrange(desc(totalFeeling)) %>%
+#       data.table()
+#   },
+#   "data4" = {
+# aniNrcMovieWider <- aniNrcWordLonger[, .(n = .N), by = .(movie, sentiment)][
+#                                                   order(movie, sentiment)] %>%
+#   pivot_wider(names_from = sentiment, id_cols = c("movie", "n"), values_from = n) %>%
+#   mutate(totalSentiment = positive - negative,
+#          totalFeeling = sum(c_across(c(2:6, 9:11)))) %>%
+#   data.table()
+#   },
+#   replications = 100
+# )
+
+aniNrcMovieWider <- aniNrcWordLonger[, .(n = .N), by = .(movie, sentiment)][
+                                                  order(movie, sentiment)] %>%
   pivot_wider(names_from = sentiment, id_cols = c("movie", "n"), values_from = n) %>%
-  mutate(totalSentiment = positive - negative) %>%
   rowwise() %>%
-  mutate(totalFeeling = sum(c_across(c(2:6, 9:11)))) %>%
-  arrange(desc(totalFeeling)) %>%
+  mutate(totalSentiment = positive - negative,
+         totalFeeling = sum(c_across(c(2:6, 9:11)))) %>%
   data.table()
 aniNrcMovieWider
 ```
 
 
 ```{r}
-transpose(data.table(sentiment = unique(nrc$sentiment), 
-                     max = max(aniNrcMovieWider %>% select(unique(nrc$sentiment))),
-                     min = min(aniNrcMovieWider %>% select(unique(nrc$sentiment)))), 
+transpose(data.table(sentiment = nrcSentimentsNoPosNeg, 
+                     max = max(aniNrcMovieWider %>% select(nrcSentimentsNoPosNeg)),
+                     min = min(aniNrcMovieWider %>% select(nrcSentimentsNoPosNeg))), 
           make.names = "sentiment") %>%
-  rbind(aniNrcMovieWider %>% select(unique(nrc$sentiment))) %>%
+  rbind(aniNrcMovieWider %>% select(nrcSentimentsNoPosNeg)) %>%
   `rownames<-`(c("max", "min", aniNrcMovieWider$movie)) %>%
   radarchart()
+```
+
+```{r}
+movieData[aniNrcMovieWider, on = "movie"] %>%
+  ggplot() +
+  geom_line(aes(x = animatedRelease, y = totalFeeling), color = "purple", size = 2) +
+  geom_line(aes(x = animatedRelease, y = totalSentiment), color = "blue", size = 2)
 ```
 
