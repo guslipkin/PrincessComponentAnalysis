@@ -10,6 +10,8 @@ library(data.table)
 library(srt)
 library(tidytext)
 library(fmsb)
+library(arules)
+library(arulesViz)
 ```
 
 
@@ -340,5 +342,34 @@ movieData[aniNrcMovieWider, on = "movie"] %>%
   scale_color_manual(values = movieColors[tmp$movie]) +
   theme(legend.position = "none",
         axis.title.y = element_blank())
+```
+
+```{r}
+nrcFactor <- aniNrcLineWider
+nrcFactor <- map_df(nrcFactor %>%
+                      # filter(movie == "Mulan") %>%
+                      select(nrcSentiments, movie, song), as.factor)
+nrcTr <- as(nrcFactor, "transactions")
+nrcRules <- apriori(
+  nrcTr,
+  parameter = list(support = .001, minlen = 10),
+  appearance = list(rhs = "song=TRUE")
+)
+write(nrcRules,
+      file = "nrcRules.csv",
+      sep = ",",
+      quote = TRUE,
+      row.names = FALSE)
+nrcRules <- fread("nrcRules.csv")
+nrcRules <- separate(nrcRules, rules, c("lhs", "rhs"), " => ")
+# doing the above bit of IO is way faster than the next line
+# nrcRules <- data.table(as(nrcRules %>% inspect(), "data.frame"))
+
+nrcRules[order(lift, decreasing = TRUE), .(lhs, rhs, lift, count)][grepl("movie", lhs)]
+```
+
+
+```{r}
+
 ```
 
