@@ -56,18 +56,26 @@ animated[sample(1:nrow(animated), size = 6)]
 ```{r}
 # Re-scale the time code so that we can compare rise and fall of the movie
 rescale <- function(x){(x-min(x))/(max(x)-min(x))}
-animated[, c("startScale", "endScale") := .(rescale(start), rescale(end)), by = movie]
+# animated[, c("startScale", "endScale") := .(rescale(start), rescale(end)), by = movie]
+animated[, ':='(startScale = rescale(start),
+                endScale = rescale(end)), by = movie]
 
 # Create a `song` column and set it to False
 animated[, song := FALSE]
 
 # Some movies have clearly marked lines that are in song
+# animated[movie %in% c("Aladdin", "Beauty", "Sleeping", "Mermaid"), 
+#          song := grepl("(<\\/?i>)|(♫)|(\\{\\\\i1?\\})", 
+#                        subtitle)][
+#            , subtitle := gsub("(<\\/?i>)|(♫)|(\\[Singing\\])|(\\{\\\\i1?\\})", 
+#                               "", 
+#                               subtitle)]
 animated[movie %in% c("Aladdin", "Beauty", "Sleeping", "Mermaid"), 
-         song := grepl("(<\\/?i>)|(♫)|(\\{\\\\i1?\\})", 
-                       subtitle)][
-           , subtitle := gsub("(<\\/?i>)|(♫)|(\\[Singing\\])|(\\{\\\\i1?\\})", 
+         ':='(song = grepl("(<\\/?i>)|(♫)|(\\{\\\\i1?\\})", 
+                           subtitle),
+              subtitle = gsub("(<\\/?i>)|(♫)|(\\[Singing\\])|(\\{\\\\i1?\\})", 
                               "", 
-                              subtitle)]
+                              subtitle))]
 
 
 
@@ -92,10 +100,10 @@ animated[movie == "Mulan" &
          song := TRUE]
 
 # set the movie column to be a factor
-animated[,movie := factor(movie, levels=names(sort(table(movie), decreasing = TRUE)))]
+animated[, movie := as.factor(movie)]
 
 # Sample some lines to see the changes
-animated[][sample(1:.N, size = 6)]
+animated[sample(1:.N, size = 6)]
 ```
 
 
@@ -170,53 +178,44 @@ tmp <- aniNrcWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
   rowwise(groupID) %>%
   mutate(totalFeeling = sum(c_across(nrcSentiments), na.rm = TRUE)) %>%
   ungroup() %>%
-  select(startScale, movie, totalFeeling) %>%
-  group_by(startScale, movie) %>%
-  summarise(rep = seq(1, totalFeeling, 1)) %>%
-  arrange(movie) %>%
-  mutate(movie = factor(movie, levels = rev(movieData$movie)),
-         movColors = movieColors[movie])
+  data.table() %>%
+  .[, .(startScale, movie, totalFeeling)] %>%
+  .[, .(rep = seq(1, totalFeeling, 1)), by = list(startScale, movie)] %>%
+  .[order(movie)] %>%
+  .[, movie := factor(movie, levels = rev(movieData$movie))]
+
 tmp %>%
   ggplot() +
   geom_density_ridges(aes(x = startScale, y = movie, fill = movie), 
                       color = "black") +
-  scale_fill_manual(values = tmp$movColors[order(tmp$movie)]) +
+  scale_fill_manual(values = movieColors[tmp$movie]) +
   theme_ridges() +
   xlim(0, 1) +
   theme(legend.position = "none",
         axis.title.x = element_blank(),
         axis.title.y = element_blank()) +
   labs(title = "NRC emotions over the course of the movie")
-
-rm(test)
 ```
 
 
 ```{r}
 # by line
-tmp1 <- aniAfinnWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
-  group_by(movie, song, groupID) %>%
-  summarise(value = sum(value)) %>%
-  arrange(movie) %>%
-  mutate(movie = factor(movie, levels = movieData$movie),
-         movColors = movieColors[movie],
-         song = ifelse(song, "Sung", "Spoken")) %>%
-  select(movie, song, groupID, value, movColors)
+# tmp <- aniAfinnWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
+#   group_by(movie, song, groupID) %>%
+#   summarise(value = sum(value)) %>%
+#   arrange(movie, groupID) %>%
+#   mutate(movie = factor(movie, levels = movieData$movie),
+#          movColors = movieColors[movie],
+#          song = ifelse(song, "Sung", "Spoken")) %>%
+#   select(movie, song, groupID, value, movColors)
 
-typeof(movieColors["Aladdin"])
-
-# for some reason a data.table style mutate or select breaks this
-tmp2 <- aniAfinnWordLonger %>%
+tmp <- aniAfinnWordLonger %>%
   .[, groupID := .GRP, by = list(n, movie)] %>%
   .[, .(value = sum(value)), by = list(movie, song, groupID)] %>%
-  mutate(movie = factor(movie, levels = movieData$movie),
-         movColors = movieColors[movie],
-         song = ifelse(song, "Sung", "Spoken")) %>%
-  .[order(movie)]
+  .[order(movie, groupID)] %>%
+  .[, ':='(movie = factor(movie, levels = movieData$movie),
+         song = ifelse(song, "Sung", "Spoken"))]
 
-all_equal(tmp2, tmp1)
-
-tmp <- tmp1
 tmp %>%
   ggplot() +
   geom_violin(aes(x = song, y = value, linetype = song, fill = movie), position = "dodge") + 
@@ -225,7 +224,7 @@ tmp %>%
   labs(title = "Variation in positive and negative emotions of lines by type") +
   theme(legend.position = "none") +
   facet_wrap(~movie) +
-  scale_fill_manual(values = tmp$movColors[order(tmp$movie)])
+  scale_fill_manual(values = movieColors[tmp$movie])
 
 
 # by word
@@ -239,9 +238,9 @@ tmp %>%
 tmp <- aniAfinnWordLonger %>%
   .[order(movie)] %>%
   .[, ':='(movie = factor(movie, levels = movieData$movie),
-                              movColors = movieColors[movie],
-                              song = ifelse(song, "Sung", "Spoken"))] %>%
-  .[, .(movie, value, song, movColors)]
+                          song = ifelse(song, "Sung", "Spoken"))] %>%
+  .[, .(movie, value, song)]
+
 tmp %>%
   ggplot() +
   geom_violin(aes(x = song, y = value, linetype = song, fill = movie), position = "dodge") + 
@@ -250,7 +249,7 @@ tmp %>%
   labs(title = "Variation in positive and negative emotions of words by type") +
   theme(legend.position = "none") +
   facet_wrap(~movie) +
-  scale_fill_manual(values = tmp$movColors[order(tmp$movie)])
+  scale_fill_manual(values = movieColors[tmp$movie])
 ```
 
 
@@ -334,7 +333,12 @@ transpose(data.table(sentiment = nrcSentimentsNoPosNeg,
 ```{r}
 movieData[aniNrcMovieWider, on = "movie"] %>%
   ggplot() +
-  geom_line(aes(x = animatedRelease, y = totalFeeling), color = "purple", size = 2) +
-  geom_line(aes(x = animatedRelease, y = totalSentiment), color = "blue", size = 2)
+  geom_line(aes(x = animatedRelease, y = totalFeeling), color = "darkgrey", size = 1.5) +
+  geom_line(aes(x = animatedRelease, y = totalSentiment), color = "darkgrey", size = 1.5) +
+  geom_point(aes(x = animatedRelease, y = totalFeeling, color = movie), size = 5) +
+  geom_point(aes(x = animatedRelease, y = totalSentiment, color = movie), size = 5) +
+  scale_color_manual(values = movieColors[tmp$movie]) +
+  theme(legend.position = "none",
+        axis.title.y = element_blank())
 ```
 
