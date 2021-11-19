@@ -100,6 +100,10 @@ animated[movie == "Mulan" &
            n %in% c(52:55,  58:61, 65:85, 89:107, 133:154, 449:492 ,585:618, 
                     760:764), 
          song := TRUE]
+animated[movie == "Pocahontas" & 
+           n %in% c(2:5, 110:135, 241:276, 322:399, 713:755, 1095:1112, 1115:1121, 
+                    1182:1225, 1233, 1509, 1511, 1599:1605, 1611:1615), 
+         song := TRUE]
 
 # set the movie column to be a factor
 animated[, movie := as.factor(movie)]
@@ -171,6 +175,50 @@ aniNrcLineWider[sample(1:nrow(aniNrcLineWider), size = 6)]
 #   select(movie, n, start, end, nrcSentiments) %>%
 #   arrange(movie, n)
 ```
+
+```{r}
+topWords <- aniAfinnWordLonger[!data.table(stop_words), on = "word"] %>%
+  .[, .N, by = list(movie, word, song)] %>%
+  .[, c("count", "N") := .(N, NULL)] %>%
+  .[order(desc(count))] %>%
+  .[, indx := seq_len(.N), by = list(movie, song)] %>%
+  .[order(movie, desc(count))] %>%
+  ungroup()
+
+topWords[indx <= 10L & song == FALSE] %>%
+  .[, word := reorder_within(word, count, movie)] %>%
+  ggplot() +
+  geom_col(aes(x = count, y = word, fill = movie), color = "black") +
+  guides(fill = "none") +
+  labs(x = NULL, y = NULL) +
+  facet_wrap(~movie, scales = "free_y") +
+  theme_minimal() +
+  scale_fill_manual(values = movieColors[topWords$movie]) +
+  scale_y_reordered() +
+  labs(title = "Top ten most common spoken words by movie")
+
+topWords[indx <= 10L & song == TRUE] %>%
+  .[, word := reorder_within(word, count, movie)] %>%
+  ggplot() +
+  geom_col(aes(x = count, y = word, fill = movie), color = "black") +
+  guides(fill = "none") +
+  labs(x = NULL, y = NULL) +
+  facet_wrap(~movie, scales = "free_y") +
+  theme_minimal() +
+  scale_fill_manual(values = movieColors[topWords$movie]) +
+  scale_y_reordered() +
+  labs(title = "Top ten most common sung words by movie")
+
+# word cloud is still a work in progress
+# topWords[indx <= 5L] %>%
+#   ggplot() +
+#   ggwordcloud::geom_text_wordcloud_area(aes(label = word, size = count, color = movie)) +
+#   scale_size_area(max_size = 10) +
+#   theme_minimal() +
+#   facet_wrap(~song) +
+#   scale_color_manual(values = movieColors[topWords$movie])
+```
+
 
 ```{r}
 tmp <- aniNrcWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
@@ -344,7 +392,7 @@ movieData[aniNrcMovieWider, on = "movie"] %>%
         axis.title.y = element_blank())
 ```
 
-```{r}
+```{r, eval=FALSE}
 nrcFactor <- aniNrcLineWider
 nrcFactor <- map_df(nrcFactor %>%
                       # filter(movie == "Mulan") %>%
@@ -352,8 +400,9 @@ nrcFactor <- map_df(nrcFactor %>%
 nrcTr <- as(nrcFactor, "transactions")
 nrcRules <- apriori(
   nrcTr,
-  parameter = list(support = .001, minlen = 10),
-  appearance = list(rhs = "song=TRUE")
+  parameter = list(support = .001, minlen = 4)
+  # ,
+  # appearance = list(rhs = "song=TRUE")
 )
 write(nrcRules,
       file = "nrcRules.csv",
@@ -365,7 +414,7 @@ nrcRules <- separate(nrcRules, rules, c("lhs", "rhs"), " => ")
 # doing the above bit of IO is way faster than the next line
 # nrcRules <- data.table(as(nrcRules %>% inspect(), "data.frame"))
 
-nrcRules[order(lift, decreasing = TRUE), .(lhs, rhs, lift, count)][grepl("movie", lhs)]
+nrcRules[order(lift, decreasing = TRUE), .(lhs, rhs, lift, count)][grepl("movie", rhs)]
 ```
 
 
