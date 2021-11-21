@@ -1,0 +1,426 @@
+---
+title: "A quick and easy way to show off the fun stuff"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+```{r include=FALSE}
+library(tidyverse)
+library(ggridges)
+library(data.table)
+library(srt)
+library(tidytext)
+library(fmsb)
+library(arules)
+library(arulesViz)
+```
+
+
+```{r include=FALSE}
+# read in movie data
+movieData <- fread("movieData.csv", na.strings = "")[, movie := as.factor(movie)]
+movieData[sample(1:nrow(movieData), size = 6)]
+
+# set movie colors
+movieColors <- c("Aladdin" = "steelblue1",
+                 "Beauty" = "gold1",
+                 "Brave" = "darkorange1",
+                 "Cinderella" = "skyblue1",
+                 "Frog" = "olivedrab2",
+                 "Mermaid" = "aquamarine1",
+                 "Moana" = "cyan2",
+                 "Mulan" = "firebrick3",
+                 "Pocahontas" = "burlywood",
+                 "Sleeping" = "palevioletred1",
+                 "Snow" = "red2",
+                 "Tangled" = "mediumorchid1")
+```
+
+
+```{r}
+# read in subtitle files and create a `movie` column for identification
+animated <- rbindlist(list(
+  data.table(read_srt(path = "MovieSubtitles/Animated/Aladdin.srt", collapse = " "))[, movie := "Aladdin"],
+  data.table(read_srt(path = "MovieSubtitles/Animated/Beauty and the Beast.srt", collapse = " "))[, movie := "Beauty"],
+  data.table(read_srt(path = "MovieSubtitles/Animated/Brave.srt", collapse = " "))[, movie := "Brave"],
+  data.table(read_srt(path = "MovieSubtitles/Animated/Cinderella.srt", collapse = " "))[, movie := "Cinderella"],
+  data.table(read_srt(path = "MovieSubtitles/Animated/The Princess and the Frog.srt", collapse = " "))[, movie := "Frog"],
+  data.table(read_srt(path = "MovieSubtitles/Animated/The Little Mermaid.srt", collapse = " "))[, movie := "Mermaid"],
+  data.table(read_srt(path = "MovieSubtitles/Animated/Moana.srt", collapse = " "))[, movie := "Moana"],
+  data.table(read_srt(path = "MovieSubtitles/Animated/Mulan.srt", collapse = " "))[, movie := "Mulan"],
+  data.table(read_srt(path = "MovieSubtitles/Animated/Pocahontas.srt", collapse = " "))[, movie := "Pocahontas"],
+  data.table(read_srt(path = "MovieSubtitles/Animated/Sleeping Beauty.srt", collapse = " "))[, movie := "Sleeping"],
+  data.table(read_srt(path = "MovieSubtitles/Animated/Snow White and The Seven Dwarfs.srt", collapse = " "))[, movie := "Snow"],
+  data.table(read_srt(path = "MovieSubtitles/Animated/Tangled.srt", collapse = " "))[, movie := "Tangled"]))
+animated[sample(1:nrow(animated), size = 6)]
+```
+
+
+```{r include=FALSE}
+# Re-scale the time code so that we can compare rise and fall of the movie
+rescale <- function(x){(x-min(x))/(max(x)-min(x))}
+# animated[, c("startScale", "endScale") := .(rescale(start), rescale(end)), by = movie]
+animated[, ':='(startScale = rescale(start),
+                endScale = rescale(end)), by = movie]
+
+# Create a `song` column and set it to False
+animated[, song := FALSE]
+
+# Some movies have clearly marked lines that are in song
+# animated[movie %in% c("Aladdin", "Beauty", "Sleeping", "Mermaid"), 
+#          song := grepl("(<\\/?i>)|(♫)|(\\{\\\\i1?\\})", 
+#                        subtitle)][
+#            , subtitle := gsub("(<\\/?i>)|(♫)|(\\[Singing\\])|(\\{\\\\i1?\\})", 
+#                               "", 
+#                               subtitle)]
+animated[movie %in% c("Aladdin", "Beauty", "Sleeping", "Mermaid"), 
+         ':='(song = grepl("(<\\/?i>)|(♫)|(\\{\\\\i1?\\})", 
+                           subtitle),
+              subtitle = gsub("(<\\/?i>)|(♫)|(\\[Singing\\])|(\\{\\\\i1?\\})", 
+                              "", 
+                              subtitle))]
+
+
+
+# Brave lines are not in song
+animated[movie %in% c("Brave", "Tangled"), 
+         subtitle := gsub("(<i>)|(<\\/i>)|(♫)", 
+                          "", 
+                          subtitle)]
+
+# These lines are in song
+animated[movie == "Cinderella" & 
+           n %in% c(54:66, 312:332, 432:452, 479:486, 488, 492:494, 545:546, 548, 
+                    550, 552:553, 583:599, 662:667, 723:737, 1034:1038), 
+         song := TRUE]
+animated[movie == "Moana" & 
+           n %in% c(75:121, 315:329, 504:566, 231:271, 872:892, 900:941, 
+                    1136:1159, 1190:1196), 
+         song := TRUE]
+animated[movie == "Mulan" & 
+           n %in% c(52:55,  58:61, 65:85, 89:107, 133:154, 449:492 ,585:618, 
+                    760:764), 
+         song := TRUE]
+animated[movie == "Pocahontas" & 
+           n %in% c(2:5, 110:135, 241:276, 322:399, 713:755, 1095:1112, 1115:1121, 
+                    1182:1225, 1233, 1509, 1511, 1599:1605, 1611:1615), 
+         song := TRUE]
+
+# set the movie column to be a factor
+animated[, movie := as.factor(movie)]
+
+# Sample some lines to see the changes
+animated[sample(1:.N, size = 6)]
+```
+
+
+```{r include=FALSE}
+# get sentiments now so we don't have to keep doing it later
+afinn <- data.table(get_sentiments("afinn"))
+bing <- data.table(get_sentiments("bing"))
+nrc <- data.table(get_sentiments("nrc"))
+
+nrcSentiments <- unique(nrc$sentiment)
+nrcSentimentsNoPosNeg <- nrcSentiments[-3][-6]
+```
+
+
+```{r}
+# generates longer data using each of the three dictionaries
+# each word is on its own row
+aniAfinnWordLonger <- animated %>%
+  unnest_tokens(word, subtitle) %>%
+  .[afinn, on = "word", nomatch = 0]
+aniAfinnWordLonger[sample(1:nrow(aniAfinnWordLonger), size = 6)]
+
+aniBingWordLonger <- animated %>%
+  unnest_tokens(word, subtitle) %>%
+  .[bing, on = "word", nomatch = 0]
+aniBingWordLonger[sample(1:nrow(aniBingWordLonger), size = 6)]
+
+# in this case, words can be repeated if they have more than one sentiment
+aniNrcWordLonger <- animated %>%
+  unnest_tokens(word, subtitle) %>%
+  .[nrc, on = "word", nomatch = 0]
+aniNrcWordLonger[sample(1:nrow(aniNrcWordLonger), size = 6)]
+  
+# this version is .001 seconds slower...
+# aniNrcLineWider <- aniNrcWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
+#   unique() %>%
+#   select(-c(word)) %>%
+#   pivot_wider(names_from = sentiment, values_from = 1, values_fn = length) %>%
+#   arrange(movie, start) %>%
+#   mutate(across(nrcSentiments, ~ifelse(is.na(.x), FALSE, TRUE))) %>%
+#   data.table()
+# aniNrcLineWider[sample(1:nrow(aniNrcLineWider), size = 6)]
+
+# creates a wider version of aniNrcWordLonger, but aggregates by line
+# lines are identified with a `groupID` found by grouping by line number and movie
+aniNrcLineWider <- aniNrcWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
+  unique() %>%
+  .[, !c("word")] %>%
+  pivot_wider(names_from = sentiment, values_from = 1, values_fn = length) %>%
+  setorderv(c("movie", "start")) %>%
+  mutate(across(nrcSentiments, ~ifelse(is.na(.x), FALSE, TRUE))) %>%
+  data.table()
+aniNrcLineWider[sample(1:nrow(aniNrcLineWider), size = 6)]
+# I spent so much time on this but made it better above :(
+# it also showcases the some of the tidyverse version of the nonsense above
+# %>%
+#   left_join(aniNrcWordLonger %>%
+#               group_by(n, movie) %>%
+#               mutate(groupID = cur_group_id()) %>%
+#               select(-c(n, word, sentiment)) %>%
+#               unique(),
+#             by = "groupID") %>%
+#   select(movie, n, start, end, nrcSentiments) %>%
+#   arrange(movie, n)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+topWords <- aniAfinnWordLonger[!data.table(stop_words), on = "word"] %>%
+  .[, .N, by = list(movie, word, song)] %>%
+  .[, c("count", "N") := .(N, NULL)] %>%
+  .[order(desc(count))] %>%
+  .[, indx := seq_len(.N), by = list(movie, song)] %>%
+  .[order(movie, desc(count))] %>%
+  ungroup()
+
+topWords[indx <= 10L & song == FALSE] %>%
+  .[, word := reorder_within(word, count, movie)] %>%
+  ggplot() +
+  geom_col(aes(x = count, y = word, fill = movie), color = "black") +
+  guides(fill = "none") +
+  labs(x = NULL, y = NULL) +
+  facet_wrap(~movie, scales = "free_y") +
+  theme_minimal() +
+  scale_fill_manual(values = movieColors[topWords$movie]) +
+  scale_y_reordered() +
+  labs(title = "Top ten most common spoken words by movie")
+
+topWords[indx <= 10L & song == TRUE] %>%
+  .[, word := reorder_within(word, count, movie)] %>%
+  ggplot() +
+  geom_col(aes(x = count, y = word, fill = movie), color = "black") +
+  guides(fill = "none") +
+  labs(x = NULL, y = NULL) +
+  facet_wrap(~movie, scales = "free_y") +
+  theme_minimal() +
+  scale_fill_manual(values = movieColors[topWords$movie]) +
+  scale_y_reordered() +
+  labs(title = "Top ten most common sung words by movie")
+
+# word cloud is still a work in progress
+# topWords[indx <= 5L] %>%
+#   ggplot() +
+#   ggwordcloud::geom_text_wordcloud_area(aes(label = word, size = count, color = movie)) +
+#   scale_size_area(max_size = 10) +
+#   theme_minimal() +
+#   facet_wrap(~song) +
+#   scale_color_manual(values = movieColors[topWords$movie])
+```
+
+
+```{r echo=FALSE, warning=FALSE}
+tmp <- aniNrcWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
+  unique() %>%
+  .[, !c("word")] %>%
+  pivot_wider(names_from = sentiment, values_from = 1, values_fn = length) %>%
+  rowwise(groupID) %>%
+  mutate(totalFeeling = sum(c_across(nrcSentiments), na.rm = TRUE)) %>%
+  ungroup() %>%
+  data.table() %>%
+  .[, .(startScale, movie, totalFeeling)] %>%
+  .[, .(rep = seq(1, totalFeeling, 1)), by = list(startScale, movie)] %>%
+  .[order(movie)] %>%
+  .[, movie := factor(movie, levels = rev(movieData$movie))]
+
+tmp %>%
+  ggplot() +
+  geom_density_ridges(aes(x = startScale, y = movie, fill = movie), 
+                      color = "black") +
+  scale_fill_manual(values = movieColors[tmp$movie]) +
+  theme_ridges() +
+  xlim(0, 1) +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +
+  labs(title = "NRC emotions over the course of the movie")
+```
+
+
+```{r echo=FALSE}
+# by line
+# tmp <- aniAfinnWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
+#   group_by(movie, song, groupID) %>%
+#   summarise(value = sum(value)) %>%
+#   arrange(movie, groupID) %>%
+#   mutate(movie = factor(movie, levels = movieData$movie),
+#          movColors = movieColors[movie],
+#          song = ifelse(song, "Sung", "Spoken")) %>%
+#   select(movie, song, groupID, value, movColors)
+
+tmp <- aniAfinnWordLonger %>%
+  .[, groupID := .GRP, by = list(n, movie)] %>%
+  .[, .(value = sum(value)), by = list(movie, song, groupID)] %>%
+  .[order(movie, groupID)] %>%
+  .[, ':='(movie = factor(movie, levels = movieData$movie),
+         song = ifelse(song, "Sung", "Spoken"))]
+
+tmp %>%
+  ggplot() +
+  geom_violin(aes(x = song, y = value, linetype = song, fill = movie), position = "dodge") + 
+  ylim(min(tmp$value), max(tmp$value)) +
+  geom_hline(yintercept = 0, size = .5) +
+  labs(title = "Variation in positive and negative emotions of lines by type") +
+  theme(legend.position = "none") +
+  facet_wrap(~movie) +
+  scale_fill_manual(values = movieColors[tmp$movie])
+
+
+# by word
+# tmp <- aniAfinnWordLonger %>%
+#   arrange(movie) %>%
+#   mutate(movie = factor(movie, levels = movieData$movie),
+#          movColors = movieColors[movie],
+#          song = ifelse(song, "Sung", "Spoken")) %>%
+#   select(movie, value, song, movColors, songColors)
+
+tmp <- aniAfinnWordLonger %>%
+  .[order(movie)] %>%
+  .[, ':='(movie = factor(movie, levels = movieData$movie),
+                          song = ifelse(song, "Sung", "Spoken"))] %>%
+  .[, .(movie, value, song)]
+
+tmp %>%
+  ggplot() +
+  geom_violin(aes(x = song, y = value, linetype = song, fill = movie), position = "dodge") + 
+  ylim(-5, 5) +
+  geom_hline(yintercept = 0, size = .5) +
+  labs(title = "Variation in positive and negative emotions of words by type") +
+  theme(legend.position = "none") +
+  facet_wrap(~movie) +
+  scale_fill_manual(values = movieColors[tmp$movie])
+```
+
+
+```{r echo=FALSE}
+# gets sentiment scores for each movie
+
+# adds up all the individual sentiments for each movie
+aniAfinnWordLonger[, 
+                   .(totalSentiment = sum(value)), 
+                   by = movie][order(desc(totalSentiment))] %>%
+  print()
+
+# gets sentiments, counts the number of positive and negative per movie,
+#   then gets a total by finding the difference
+unique(aniBingWordLonger[,
+                         n := .N,
+                         by = .(movie, sentiment)][,
+                                                   .(movie, sentiment,
+                                                     n)][order(movie, sentiment)]) %>%
+  pivot_wider(names_from = sentiment, id_cols = c("movie", "n"), values_from = n) %>%
+  data.table() %>%
+  .[, totalSentiment := positive - negative] %>%
+  .[order(desc(totalSentiment))] %>%
+  print()
+
+# counts the number of each sentiment in each movie
+# also creates a new column that finds the difference between `negative` and `positive`
+#   and adds up the total number of sentiments (not including `negative` and `positive` 
+#   to create `totalFeeling`
+
+# some proof that data.table can be wicked fast
+# rbenchmark::benchmark(
+#   "tidy" = {
+#     aniNrcMovieWider <- aniNrcWordLonger %>%
+#       group_by(movie) %>%
+#       count(sentiment) %>%
+#       arrange(movie, sentiment) %>%
+#       pivot_wider(
+#         names_from = sentiment,
+#         id_cols = c("movie", "n"),
+#         values_from = n
+#       ) %>%
+#       mutate(totalSentiment = positive - negative) %>%
+#       rowwise() %>%
+#       mutate(totalFeeling = sum(c_across(c(2:6, 9:11)))) %>%
+#       arrange(desc(totalFeeling)) %>%
+#       data.table()
+#   },
+#   "data4" = {
+# aniNrcMovieWider <- aniNrcWordLonger[, .(n = .N), by = .(movie, sentiment)][
+#                                                   order(movie, sentiment)] %>%
+#   pivot_wider(names_from = sentiment, id_cols = c("movie", "n"), values_from = n) %>%
+#   mutate(totalSentiment = positive - negative,
+#          totalFeeling = sum(c_across(c(2:6, 9:11)))) %>%
+#   data.table()
+#   },
+#   replications = 100
+# )
+
+aniNrcMovieWider <- aniNrcWordLonger[, .(n = .N), by = .(movie, sentiment)][
+                                                  order(movie, sentiment)] %>%
+  pivot_wider(names_from = sentiment, id_cols = c("movie", "n"), values_from = n) %>%
+  rowwise() %>%
+  mutate(totalSentiment = positive - negative,
+         totalFeeling = sum(c_across(c(2:6, 9:11)))) %>%
+  data.table()
+aniNrcMovieWider
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+transpose(data.table(sentiment = nrcSentimentsNoPosNeg, 
+                     max = max(aniNrcMovieWider %>% select(nrcSentimentsNoPosNeg)),
+                     min = min(aniNrcMovieWider %>% select(nrcSentimentsNoPosNeg))), 
+          make.names = "sentiment") %>%
+  rbind(aniNrcMovieWider %>% select(nrcSentimentsNoPosNeg)) %>%
+  `rownames<-`(c("max", "min", aniNrcMovieWider$movie)) %>%
+  radarchart()
+```
+
+```{r eval=FALSE, include=FALSE}
+movieData[aniNrcMovieWider, on = "movie"] %>%
+  ggplot() +
+  geom_line(aes(x = animatedRelease, y = totalFeeling), color = "darkgrey", size = 1.5) +
+  geom_line(aes(x = animatedRelease, y = totalSentiment), color = "darkgrey", size = 1.5) +
+  geom_point(aes(x = animatedRelease, y = totalFeeling, color = movie), size = 5) +
+  geom_point(aes(x = animatedRelease, y = totalSentiment, color = movie), size = 5) +
+  scale_color_manual(values = movieColors[tmp$movie]) +
+  theme(legend.position = "none",
+        axis.title.y = element_blank())
+```
+
+```{r eval=FALSE, include=FALSE}
+nrcFactor <- aniNrcLineWider
+nrcFactor <- map_df(nrcFactor %>%
+                      # filter(movie == "Mulan") %>%
+                      select(nrcSentiments, movie, song), as.factor)
+nrcTr <- as(nrcFactor, "transactions")
+nrcRules <- apriori(
+  nrcTr,
+  parameter = list(support = .001, minlen = 4)
+  # ,
+  # appearance = list(rhs = "song=TRUE")
+)
+write(nrcRules,
+      file = "nrcRules.csv",
+      sep = ",",
+      quote = TRUE,
+      row.names = FALSE)
+nrcRules <- fread("nrcRules.csv")
+nrcRules <- separate(nrcRules, rules, c("lhs", "rhs"), " => ")
+# doing the above bit of IO is way faster than the next line
+# nrcRules <- data.table(as(nrcRules %>% inspect(), "data.frame"))
+
+nrcRules[order(lift, decreasing = TRUE), .(lhs, rhs, lift, count)][grepl("movie", rhs)]
+```
+
+
+```{r}
+
+```
+
