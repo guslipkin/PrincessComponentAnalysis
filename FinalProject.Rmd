@@ -78,17 +78,17 @@ animated[, song := FALSE]
 #            , subtitle := gsub("(<\\/?i>)|(♫)|(\\[Singing\\])|(\\{\\\\i1?\\})", 
 #                               "", 
 #                               subtitle)]
-animated[movie %in% c("Aladdin", "Beauty", "Sleeping", "Mermaid"), 
-         ':='(song = grepl("(<\\/?i>)|(♫)|(\\{\\\\i1?\\})", 
+animated[movie %in% c("Aladdin", "Beauty", "Sleeping", "Mermaid", "Tangled"), 
+         ':='(song = grepl("(\\*?<\\/?i>\\*?)|(♫)|(\\{\\\\i1?\\})", 
                            subtitle),
-              subtitle = gsub("(<\\/?i>)|(♫)|(\\[Singing\\])|(\\{\\\\i1?\\})", 
+              subtitle = gsub("(\\*?<\\/?i>\\*?)|(♫)|(\\[Singing\\])|(\\{\\\\i1?\\})", 
                               "", 
                               subtitle))]
 
 
 
 # Brave lines are not in song
-animated[movie %in% c("Brave", "Tangled"), 
+animated[movie %in% c("Brave"), 
          subtitle := gsub("(<i>)|(<\\/i>)|(♫)", 
                           "", 
                           subtitle)]

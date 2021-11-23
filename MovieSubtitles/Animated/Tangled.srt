@@ -289,7 +289,7 @@ not so bad in there.
 
 64
 00:06:10,278 --> 00:06:11,680
-*Sings "When will my life begin"*
+<i>*When will my life begin*</i>
 
 65
 00:06:11,681 --> 00:06:15,924
@@ -337,7 +337,7 @@ and darts and baking.*</i>
 
 74
 00:06:59,817 --> 00:07:04,336
-<i>*Papier-m‚chÈ, a bit of ballet,
+<i>*Papier-m‚Äöch√à, a bit of ballet,
 and chess.*</i>
 
 75
@@ -709,7 +709,7 @@ I know, but...</i>
 
 156
 00:13:05,038 --> 00:13:09,876
-<i>*Thatís right, to keep you safe,
+<i>*That√≠s right, to keep you safe,
 and sound, dear.*</i>
 
 157
@@ -810,7 +810,7 @@ alive.*</i>
 
 178
 00:14:21,308 --> 00:14:25,181
-<i>*Gullible, naÔve,
+<i>*Gullible, na√îve,
 positively grubby.*</i>
 
 179
@@ -1653,7 +1653,7 @@ Mother would be so furious.
 
 369
 00:32:14,494 --> 00:32:17,944
-That's okay, what she doesnít
+That's okay, what she doesn√≠t
 know won't kill her, right?
 
 370
@@ -2065,7 +2065,7 @@ Find your humanity.
 
 461
 00:38:52,528 --> 00:38:54,630
-Havenít any of you ever had a dream?
+Haven√≠t any of you ever had a dream?
 
 462
 00:39:06,794 --> 00:39:09,035
@@ -2232,7 +2232,7 @@ and be a florist.*</i>
 497
 00:41:01,192 --> 00:41:05,102
 <i>*Ulf is into mime,
-Attilaís cupcakes are sublime.*</i>
+Attila√≠s cupcakes are sublime.*</i>
 
 498
 00:41:05,103 --> 00:41:06,927
@@ -2288,7 +2288,7 @@ piles of money.*</i>
 509
 00:41:38,525 --> 00:41:41,937
 <i>*-I've got a dream... I've got a dream.
-- Sheís got a dream.*</i>
+- She√≠s got a dream.*</i>
 
 510
 00:41:41,938 --> 00:41:45,452
