@@ -37,20 +37,26 @@ movieColors <- c("Aladdin" = "steelblue1",
 
 
 ```{r}
+# a function to facilitate reading in the data files
+readSRT <- function(x) {
+  data.table(read_srt(paste0("MovieSubtitles/Animated/", 
+                             x, ".srt"), 
+                      collapse = " "))
+  }
 # read in subtitle files and create a `movie` column for identification
 animated <- rbindlist(list(
-  data.table(read_srt(path = "MovieSubtitles/Animated/Aladdin.srt", collapse = " "))[, movie := "Aladdin"],
-  data.table(read_srt(path = "MovieSubtitles/Animated/Beauty and the Beast.srt", collapse = " "))[, movie := "Beauty"],
-  data.table(read_srt(path = "MovieSubtitles/Animated/Brave.srt", collapse = " "))[, movie := "Brave"],
-  data.table(read_srt(path = "MovieSubtitles/Animated/Cinderella.srt", collapse = " "))[, movie := "Cinderella"],
-  data.table(read_srt(path = "MovieSubtitles/Animated/The Princess and the Frog.srt", collapse = " "))[, movie := "Frog"],
-  data.table(read_srt(path = "MovieSubtitles/Animated/The Little Mermaid.srt", collapse = " "))[, movie := "Mermaid"],
-  data.table(read_srt(path = "MovieSubtitles/Animated/Moana.srt", collapse = " "))[, movie := "Moana"],
-  data.table(read_srt(path = "MovieSubtitles/Animated/Mulan.srt", collapse = " "))[, movie := "Mulan"],
-  data.table(read_srt(path = "MovieSubtitles/Animated/Pocahontas.srt", collapse = " "))[, movie := "Pocahontas"],
-  data.table(read_srt(path = "MovieSubtitles/Animated/Sleeping Beauty.srt", collapse = " "))[, movie := "Sleeping"],
-  data.table(read_srt(path = "MovieSubtitles/Animated/Snow White and The Seven Dwarfs.srt", collapse = " "))[, movie := "Snow"],
-  data.table(read_srt(path = "MovieSubtitles/Animated/Tangled.srt", collapse = " "))[, movie := "Tangled"]))
+  readSRT("Aladdin")[, movie := "Aladdin"],
+  readSRT("Beauty and the Beast")[, movie := "Beauty"],
+  readSRT("Brave")[, movie := "Brave"],
+  readSRT("Cinderella")[, movie := "Cinderella"],
+  readSRT("The Princess and the Frog")[, movie := "Frog"],
+  readSRT("The Little Mermaid")[, movie := "Mermaid"],
+  readSRT("Moana")[, movie := "Moana"],
+  readSRT("Mulan")[, movie := "Mulan"],
+  readSRT("Pocahontas")[, movie := "Pocahontas"],
+  readSRT("Sleeping Beauty")[, movie := "Sleeping"],
+  readSRT("Snow White and The Seven Dwarfs")[, movie := "Snow"],
+  readSRT("Tangled")[, movie := "Tangled"]))
 animated[sample(1:nrow(animated), size = 6)]
 ```
 
@@ -89,8 +95,12 @@ animated[movie %in% c("Brave", "Tangled"),
 
 # These lines are in song
 animated[movie == "Cinderella" & 
-           n %in% c(54:66, 312:332, 432:452, 479:486, 488, 492:494, 545:546, 548, 
-                    550, 552:553, 583:599, 662:667, 723:737, 1034:1038), 
+           n %in% c(54:66, 312:332, 432:452, 479:486, 488, 492:494, 545:546, 
+                    548, 550, 552:553, 583:599, 662:667, 723:737, 1034:1038), 
+         song := TRUE]
+animated[movie == "Frog" & 
+           n %in% c(2:5, 110:135, 241:276, 322:399, 713:755, 1095:1112, 1115:1121, 
+                    1182:1225, 1233, 1509, 1511, 1599:1605, 1611:1615), 
          song := TRUE]
 animated[movie == "Moana" & 
            n %in% c(75:121, 315:329, 504:566, 231:271, 872:892, 900:941, 
@@ -101,8 +111,12 @@ animated[movie == "Mulan" &
                     760:764), 
          song := TRUE]
 animated[movie == "Pocahontas" & 
-           n %in% c(2:5, 110:135, 241:276, 322:399, 713:755, 1095:1112, 1115:1121, 
-                    1182:1225, 1233, 1509, 1511, 1599:1605, 1611:1615), 
+           n %in% c(1:8, 15:22, 80:92, 160:191, 309:356, 464:497, 766:792, 
+                    810:824, 882:941), 
+         song := TRUE]
+animated[movie == "Snow" & 
+           n %in% c(18:57, 412:447, 496:502, 155:166, 167:196, 206:215, 704:720, 
+                    727:732), 
          song := TRUE]
 
 # set the movie column to be a factor
@@ -207,7 +221,8 @@ topWords[indx <= 10L & song == TRUE] %>%
   theme_minimal() +
   scale_fill_manual(values = movieColors[topWords$movie]) +
   scale_y_reordered() +
-  labs(title = "Top ten most common sung words by movie")
+  labs(title = "Top ten most common sung words by movie",
+       subtitle = "Note: Brave does not have any foreground songs")
 
 # word cloud is still a work in progress
 # topWords[indx <= 5L] %>%
@@ -271,7 +286,8 @@ tmp %>%
   geom_violin(aes(x = song, y = value, linetype = song, fill = movie), position = "dodge") + 
   ylim(min(tmp$value), max(tmp$value)) +
   geom_hline(yintercept = 0, size = .5) +
-  labs(title = "Variation in positive and negative emotions of lines by type") +
+  labs(title = "Variation in positive and negative emotions of lines by type",
+       subtitle = "Note: Brave does not have any foreground songs") +
   theme(legend.position = "none") +
   facet_wrap(~movie) +
   scale_fill_manual(values = movieColors[tmp$movie])
@@ -296,7 +312,8 @@ tmp %>%
   geom_violin(aes(x = song, y = value, linetype = song, fill = movie), position = "dodge") + 
   ylim(-5, 5) +
   geom_hline(yintercept = 0, size = .5) +
-  labs(title = "Variation in positive and negative emotions of words by type") +
+  labs(title = "Variation in positive and negative emotions of words by type",
+       subtitle = "Note: Brave does not have any foreground songs") +
   theme(legend.position = "none") +
   facet_wrap(~movie) +
   scale_fill_manual(values = movieColors[tmp$movie])
