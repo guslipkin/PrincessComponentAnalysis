@@ -12,6 +12,7 @@ library(tidytext)
 library(fmsb)
 library(arules)
 library(arulesViz)
+library(factoextra)
 ```
 
 
@@ -158,25 +159,29 @@ aniNrcWordLonger <- animated %>%
 aniNrcWordLonger[sample(1:nrow(aniNrcWordLonger), size = 6)]
   
 # this version is .001 seconds slower...
-# aniNrcLineWider <- aniNrcWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
+# aniNrcLineWiderBool <- aniNrcWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
 #   unique() %>%
 #   select(-c(word)) %>%
 #   pivot_wider(names_from = sentiment, values_from = 1, values_fn = length) %>%
 #   arrange(movie, start) %>%
 #   mutate(across(nrcSentiments, ~ifelse(is.na(.x), FALSE, TRUE))) %>%
 #   data.table()
-# aniNrcLineWider[sample(1:nrow(aniNrcLineWider), size = 6)]
+# aniNrcLineWiderBool[sample(1:nrow(aniNrcLineWiderBool), size = 6)]
 
 # creates a wider version of aniNrcWordLonger, but aggregates by line
 # lines are identified with a `groupID` found by grouping by line number and movie
-aniNrcLineWider <- aniNrcWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
+aniNrcLineWiderNum <- aniNrcWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
   unique() %>%
   .[, !c("word")] %>%
   pivot_wider(names_from = sentiment, values_from = 1, values_fn = length) %>%
   setorderv(c("movie", "start")) %>%
-  mutate(across(nrcSentiments, ~ifelse(is.na(.x), FALSE, TRUE))) %>%
   data.table()
-aniNrcLineWider[sample(1:nrow(aniNrcLineWider), size = 6)]
+aniNrcLineWiderNum[is.na(aniNrcLineWiderNum)] <- 0
+aniNrcLineWiderNum[sample(1:nrow(aniNrcLineWiderNum), size = 6)]
+
+aniNrcLineWiderBool <- aniNrcLineWiderNum %>%
+  mutate(across(nrcSentiments, ~ifelse(is.na(.x), FALSE, TRUE)))
+aniNrcLineWiderBool[sample(1:nrow(aniNrcLineWiderBool), size = 6)]
 # I spent so much time on this but made it better above :(
 # it also showcases the some of the tidyverse version of the nonsense above
 # %>%
@@ -387,7 +392,7 @@ aniNrcMovieWider
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 transpose(data.table(sentiment = nrcSentimentsNoPosNeg, 
                      max = max(aniNrcMovieWider %>% select(nrcSentimentsNoPosNeg)),
                      min = min(aniNrcMovieWider %>% select(nrcSentimentsNoPosNeg))), 
@@ -410,7 +415,7 @@ movieData[aniNrcMovieWider, on = "movie"] %>%
 ```
 
 ```{r, eval=FALSE}
-nrcFactor <- aniNrcLineWider
+nrcFactor <- aniNrcLineWiderBool
 nrcFactor <- map_df(nrcFactor %>%
                       # filter(movie == "Mulan") %>%
                       select(nrcSentiments, movie, song), as.factor)
@@ -436,6 +441,31 @@ nrcRules[order(lift, decreasing = TRUE), .(lhs, rhs, lift, count)][grepl("movie"
 
 
 ```{r}
+aniNrcLineWiderNum
+nrcPCA <- prcomp(aniNrcMovieWider[, .(anger, fear, negative, sadness, 
+                                        positive, disgust, surprise, joy, 
+                                        anticipation, trust)], scale. = T)
 
+summary(nrcPCA)
+
+fviz_contrib(nrcPCA, choice = "var", axes = 1)
+fviz_contrib(nrcPCA, choice = "var", axes = 2)
+
+fviz_pca(
+  nrcPCA,
+  geom = c("point"),
+  repel = TRUE,
+  habillage = aniNrcMovieWider$movie,
+  palette = movieColors
+)
+
+data.table("sentiment" = rownames(nrcPCA$rotation), nrcPCA$rotation) %>%
+  melt(id.vars = "sentiment",
+       measure.vars = paste0("PC", 1:10),
+       variable.name = "PC",
+       value.name = "value") %>%
+  ggplot() +
+  geom_bar(aes(x = PC, y = abs(value), fill = sentiment), position = "fill", stat = "identity", color = "black") +
+  scale_fill_manual(values = as.character(data.frame(movieColors)[,1]))
 ```
 
