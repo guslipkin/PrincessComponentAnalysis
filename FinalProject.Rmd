@@ -465,7 +465,8 @@ data.table("sentiment" = rownames(nrcPCA$rotation), nrcPCA$rotation) %>%
        variable.name = "PC",
        value.name = "value") %>%
   ggplot() +
-  geom_bar(aes(x = PC, y = abs(value), fill = sentiment), position = "fill", stat = "identity", color = "black") +
-  scale_fill_manual(values = as.character(data.frame(movieColors)[,1]))
+  geom_bar(aes(x = sentiment, y = -abs(value), fill = PC), position = "fill", stat = "identity", color = "black") +
+  scale_fill_manual(values = as.character(data.frame(movieColors)[,1])) + 
+  theme(axis.text.x = element_text(angle = 60, vjust = .6))
 ```
 
