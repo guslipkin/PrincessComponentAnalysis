@@ -13,6 +13,8 @@ library(fmsb)
 library(arules)
 library(arulesViz)
 library(factoextra)
+library(topicdoc)
+library(topicmodels)
 ```
 
 
@@ -467,6 +469,89 @@ data.table("sentiment" = rownames(nrcPCA$rotation), nrcPCA$rotation) %>%
   .[, PC := factor(PC, levels = paste0("PC", 10:1))] %>%
   ggplot() +
   geom_bar(aes(x = sentiment, y = abs(value), fill = PC), position = "fill", stat = "identity", color = "black") +
-scale_fill_manual(values = as.character(data.frame(rev(movieColors[1:10]))[,1])) + theme(axis.text.x = element_text(angle = 60, vjust = .6))
+  scale_fill_manual(values = as.character(data.frame(rev(movieColors[1:10]))[,1])) + 
+  theme(axis.text.x = element_text(angle = 60, vjust = .6))
+```
+
+```{r, eval=FALSE}
+# Just trust me, you don't want to run this
+JJ_wanna_know_average_and_variance_topic_coherence_at_once<- function(your_lda, your_dtm_textdata) {
+  temp <- topic_diagnostics(your_lda, your_dtm_textdata) %>%
+    select(topic_coherence)
+  avg <- temp %>%
+    colMeans()
+  var <- temp %>%
+    var()
+  return(avg[1])
+}
+
+score_list <- c()
+
+JJ_all_one_function <- function(your_dtm, topic_num){
+   for (i in 2:topic_num) {
+     score_list <- append(score_list,
+                          JJ_wanna_know_average_and_variance_topic_coherence_at_once(LDA(your_dtm, 
+                                                                                         k=i, 
+                                                                                         control=list(seed=i)), 
+                                                                                     your_dtm))
+   }
+  return(score_list)
+}
+
+score_list_output <- JJ_all_one_function(
+  animated %>%
+    unnest_tokens(word, subtitle, token = "ngrams", n = 2) %>%
+    # anti_join(stop_words, by = "word") %>%
+    cast_dtm(movie, word, n),
+  10
+)
+score_list_output
+
+plot(
+  x = 2:10,
+  y = score_list_output,
+  type = "l",
+  col = "red",
+  lwd = 5,
+  xlab = "topic number",
+  ylab = "avg coherence score",
+  main = "distribution of avg coherence scores"
+)
+# Best coherence at 9 topics
+```
+
+
+```{r}
+dtm <- function(x) {
+  aniDtm <- animated[movie == x, movie := as.character(x)] %>%
+    unnest_tokens(word, subtitle, token = "ngrams", n = 2) %>%
+    # anti_join(stop_words, by = "word") %>%
+    cast_dtm(movie, word, n) %>%
+    LDA(k = 9) %>%
+    terms(5)
+  return(aniDtm)
+}
+
+aniTopics <- lapply(as.character(unique(animated$movie)), FUN = dtm)
+topics <- data.table("movie" = rep(as.character(unique(animated$movie)), 
+                                   each = 5),
+                     do.call(rbind.data.frame, aniTopics)) %>%
+  melt(id.vars = "movie",
+       measure.vars = paste0("Topic ", 1:9),
+       variable.name = "topic",
+       value.name = "ngram") %>%
+  unnest_tokens(word, ngram) %>%
+  anti_join(stop_words, by = "word") %>%
+  unique() %>%
+  arrange(movie, topic) %>%
+  right_join(aniAfinnWordLonger[, .(movie, word)]) %>%
+  .[, .N, by = c("movie", "topic", "word")]
+
+wordcloud <- wordcloud2::wordcloud2(data = topics[, .(word, N)], 
+                       color = gplots::col2hex(as.character(movieColors[topics$movie]))
+                       )
+wordcloud
+htmlwidgets::saveWidget(wordcloud, "wordcloud.html", selfcontained = FALSE)
+webshot::webshot("wordcloud.html", "wordcloud.png", delay = 10)
 ```
 
