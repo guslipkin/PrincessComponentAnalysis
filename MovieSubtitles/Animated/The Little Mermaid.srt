@@ -1,4 +1,4 @@
-﻿1
+1
 00:01:16,033 --> 00:01:18,577
 {\i1}I'll tell you a tale
 of the bottomless blue{\i}
@@ -4165,8 +4165,4 @@ all day in the sun{\i}
 891
 01:18:00,012 --> 01:18:06,560
 {\i1}Part of your world{\i}
-
-892
-01:18:07,405 --> 01:18:13,273
-Best watched using Open Subtitles MKV Player
 
