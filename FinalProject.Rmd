@@ -267,6 +267,7 @@ tmp %>%
         axis.title.x = element_blank(),
         axis.title.y = element_blank()) +
   labs(title = "NRC emotions over the course of the movie")
+ggsave("nrcOverMovie.png")
 ```
 
 
@@ -295,9 +296,12 @@ tmp %>%
   geom_hline(yintercept = 0, size = .5) +
   labs(title = "Variation in positive and negative emotions of lines by type",
        subtitle = "Note: Brave does not have any foreground songs") +
-  theme(legend.position = "none") +
+  theme(legend.position = "none",
+        axis.title.x = element_blank()) +
+  ylab(label = "afinn Lexicon Value") +
   facet_wrap(~movie) +
   scale_fill_manual(values = movieColors[tmp$movie])
+ggsave("violinPlotLines.png")
 
 
 # by word
@@ -321,9 +325,12 @@ tmp %>%
   geom_hline(yintercept = 0, size = .5) +
   labs(title = "Variation in positive and negative emotions of words by type",
        subtitle = "Note: Brave does not have any foreground songs") +
-  theme(legend.position = "none") +
+  theme(legend.position = "none",
+        axis.title.x = element_blank()) +
+  ylab(label = "afinn Lexicon Value") +
   facet_wrap(~movie) +
   scale_fill_manual(values = movieColors[tmp$movie])
+ggsave("violinPlotWords.png")
 ```
 
 
@@ -412,8 +419,10 @@ movieData[aniNrcMovieWider, on = "movie"] %>%
   geom_point(aes(x = animatedRelease, y = totalFeeling, color = movie), size = 5) +
   geom_point(aes(x = animatedRelease, y = totalSentiment, color = movie), size = 5) +
   scale_color_manual(values = movieColors[tmp$movie]) +
-  theme(legend.position = "none",
-        axis.title.y = element_blank())
+  theme(legend.position = "none") +
+  xlab("Year of Movie Release") +
+  ylab("Aggregate Sentiments and Feelings From nrc Lexicon")
+ggsave("sentimentsByYear.png")
 ```
 
 ```{r, eval=FALSE}
@@ -470,7 +479,12 @@ data.table("sentiment" = rownames(nrcPCA$rotation), nrcPCA$rotation) %>%
   ggplot() +
   geom_bar(aes(x = sentiment, y = abs(value), fill = PC), position = "fill", stat = "identity", color = "black") +
   scale_fill_manual(values = as.character(data.frame(rev(movieColors[1:10]))[,1])) + 
-  theme(axis.text.x = element_text(angle = 60, vjust = .6))
+  theme(axis.text.x = element_text(angle = 60, vjust = .6)) +
+  labs(title = "Principal Components as Shares of Occurences of each nrc sentiment",
+       fill = "Principal\nComponent") +
+  xlab("Sentiment") +
+  ylab("Proportion of Principal Component")
+ggsave("PCA.png")
 ```
 
 ```{r, eval=FALSE}
