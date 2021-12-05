@@ -1,5 +1,6 @@
 ---
-title: "R Notebook"
+title: "Princess Component Analysis"
+author: "Gus Lipkin, Hailey Skoglund, Jake Greenberg"
 output: html_notebook
 ---
 
@@ -159,16 +160,6 @@ aniNrcWordLonger <- animated %>%
   unnest_tokens(word, subtitle) %>%
   .[nrc, on = "word", nomatch = 0]
 aniNrcWordLonger[sample(1:nrow(aniNrcWordLonger), size = 6)]
-  
-# this version is .001 seconds slower...
-# aniNrcLineWiderBool <- aniNrcWordLonger[, groupID := .GRP, by = list(n, movie)] %>%
-#   unique() %>%
-#   select(-c(word)) %>%
-#   pivot_wider(names_from = sentiment, values_from = 1, values_fn = length) %>%
-#   arrange(movie, start) %>%
-#   mutate(across(nrcSentiments, ~ifelse(is.na(.x), FALSE, TRUE))) %>%
-#   data.table()
-# aniNrcLineWiderBool[sample(1:nrow(aniNrcLineWiderBool), size = 6)]
 
 # creates a wider version of aniNrcWordLonger, but aggregates by line
 # lines are identified with a `groupID` found by grouping by line number and movie
@@ -184,17 +175,6 @@ aniNrcLineWiderNum[sample(1:nrow(aniNrcLineWiderNum), size = 6)]
 aniNrcLineWiderBool <- aniNrcLineWiderNum %>%
   mutate(across(nrcSentiments, ~ifelse(is.na(.x), FALSE, TRUE)))
 aniNrcLineWiderBool[sample(1:nrow(aniNrcLineWiderBool), size = 6)]
-# I spent so much time on this but made it better above :(
-# it also showcases the some of the tidyverse version of the nonsense above
-# %>%
-#   left_join(aniNrcWordLonger %>%
-#               group_by(n, movie) %>%
-#               mutate(groupID = cur_group_id()) %>%
-#               select(-c(n, word, sentiment)) %>%
-#               unique(),
-#             by = "groupID") %>%
-#   select(movie, n, start, end, nrcSentiments) %>%
-#   arrange(movie, n)
 ```
 
 ```{r}
@@ -361,35 +341,6 @@ unique(aniBingWordLonger[,
 #   and adds up the total number of sentiments (not including `negative` and `positive` 
 #   to create `totalFeeling`
 
-# some proof that data.table can be wicked fast
-# rbenchmark::benchmark(
-#   "tidy" = {
-#     aniNrcMovieWider <- aniNrcWordLonger %>%
-#       group_by(movie) %>%
-#       count(sentiment) %>%
-#       arrange(movie, sentiment) %>%
-#       pivot_wider(
-#         names_from = sentiment,
-#         id_cols = c("movie", "n"),
-#         values_from = n
-#       ) %>%
-#       mutate(totalSentiment = positive - negative) %>%
-#       rowwise() %>%
-#       mutate(totalFeeling = sum(c_across(c(2:6, 9:11)))) %>%
-#       arrange(desc(totalFeeling)) %>%
-#       data.table()
-#   },
-#   "data4" = {
-# aniNrcMovieWider <- aniNrcWordLonger[, .(n = .N), by = .(movie, sentiment)][
-#                                                   order(movie, sentiment)] %>%
-#   pivot_wider(names_from = sentiment, id_cols = c("movie", "n"), values_from = n) %>%
-#   mutate(totalSentiment = positive - negative,
-#          totalFeeling = sum(c_across(c(2:6, 9:11)))) %>%
-#   data.table()
-#   },
-#   replications = 100
-# )
-
 aniNrcMovieWider <- aniNrcWordLonger[, .(n = .N), by = .(movie, sentiment)][
                                                   order(movie, sentiment)] %>%
   pivot_wider(names_from = sentiment, id_cols = c("movie", "n"), values_from = n) %>%
@@ -402,6 +353,7 @@ aniNrcMovieWider
 
 
 ```{r, eval=FALSE}
+# not particularly useful
 transpose(data.table(sentiment = nrcSentimentsNoPosNeg, 
                      max = max(aniNrcMovieWider %>% select(nrcSentimentsNoPosNeg)),
                      min = min(aniNrcMovieWider %>% select(nrcSentimentsNoPosNeg))), 
@@ -421,11 +373,13 @@ movieData[aniNrcMovieWider, on = "movie"] %>%
   scale_color_manual(values = movieColors[tmp$movie]) +
   theme(legend.position = "none") +
   xlab("Year of Movie Release") +
-  ylab("Aggregate Sentiments and Feelings From nrc Lexicon")
+  ylab("Aggregate Sentiments and Feelings From nrc Lexicon") +
+  labs(title = "Checking to see if total feeling changed over time")
 ggsave("sentimentsByYear.png")
 ```
 
 ```{r, eval=FALSE}
+# this didn't create anything useful
 nrcFactor <- aniNrcLineWiderBool
 nrcFactor <- map_df(nrcFactor %>%
                       # filter(movie == "Mulan") %>%
