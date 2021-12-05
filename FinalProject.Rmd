@@ -133,9 +133,9 @@ animated[sample(1:.N, size = 6)]
 
 ```{r}
 # get sentiments now so we don't have to keep doing it later
-afinn <- data.table(get_sentiments("afinn"))
-bing <- data.table(get_sentiments("bing"))
-nrc <- data.table(get_sentiments("nrc"))
+afinn <- fread("afinn.csv")
+bing <- fread("bing.csv")
+nrc <- fread("nrc.csv")
 
 nrcSentiments <- unique(nrc$sentiment)
 nrcSentimentsNoPosNeg <- nrcSentiments[-3][-6]
@@ -492,7 +492,7 @@ plot(
 ```{r}
 dtm <- function(x) {
   aniDtm <- animated[movie == x, movie := as.character(x)] %>%
-    unnest_tokens(word, subtitle, token = "ngrams", n = 2) %>%
+    unnest_tokens(word, subtitle) %>%
     # anti_join(stop_words, by = "word") %>%
     cast_dtm(movie, word, n) %>%
     LDA(k = 9) %>%
@@ -501,7 +501,7 @@ dtm <- function(x) {
 }
 
 aniTopics <- lapply(as.character(unique(animated$movie)), FUN = dtm)
-topics <- data.table("movie" = rep(as.character(unique(animated$movie)), 
+topics <- data.table("movie" = rep(as.character(unique(animated$movie)),
                                    each = 5),
                      do.call(rbind.data.frame, aniTopics)) %>%
   melt(id.vars = "movie",
@@ -515,11 +515,71 @@ topics <- data.table("movie" = rep(as.character(unique(animated$movie)),
   right_join(aniAfinnWordLonger[, .(movie, word)]) %>%
   .[, .N, by = c("movie", "topic", "word")]
 
-wordcloud <- wordcloud2::wordcloud2(data = topics[, .(word, N)], 
+wordcloud <- wordcloud2::wordcloud2(data = topics[, .(word, N)],
                        color = gplots::col2hex(as.character(movieColors[topics$movie]))
                        )
 wordcloud
 htmlwidgets::saveWidget(wordcloud, "wordcloud.html", selfcontained = FALSE)
 webshot::webshot("wordcloud.html", "wordcloud.png", delay = 10)
 ```
+
+```{r}
+dtmBigram <- function(x) {
+  aniDtm <- animated[movie == x, movie := as.character(x)] %>%
+    unnest_tokens(word, subtitle, token = "ngrams", n = 3) %>%
+    # anti_join(stop_words, by = "word") %>%
+    cast_dtm(movie, word, n) %>%
+    LDA(k = 9) %>%
+    terms(5)
+  return(aniDtm)
+}
+
+aniTopics <- lapply(as.character(unique(animated$movie)), FUN = dtmBigram)
+topics <- data.table("movie" = rep(as.character(unique(animated$movie)),
+                                   each = 5),
+                     do.call(rbind.data.frame, aniTopics)) %>%
+  melt(id.vars = "movie",
+       measure.vars = paste0("Topic ", 1:9),
+       variable.name = "topic",
+       value.name = "ngram") %>%
+  # unnest_tokens(word, ngram) %>%
+  # anti_join(stop_words, by = "word") %>%
+  select(-topic) %>%
+  unique() %>%
+  # right_join(aniAfinnWordLonger[, .(movie, word)]) %>%
+  .[, .N, by = c("movie", "ngram")] %>%
+  arrange(desc(N))
+
+greplNgram <- function(x) {
+  ifelse(grepl(x, animated$subtitle),
+    return(data.table("movie" = animated$movie[grepl(x, animated$subtitle)], 
+                      "subtitle" = animated$subtitle[grepl(x, animated$subtitle)],
+                      "ngram" = x)),
+    return(data.table("movie" = NA, 
+                      "subtitle" = NA,
+                      "ngram" = NA)))
+}
+test <- lapply(topics$ngram, greplNgram)
+test <- rbindlist(test)
+test <- test[!is.na(movie)]
+test <- test %>%
+  group_by(ngram) %>%
+  count(ngram) %>%
+  data.table() %>%
+  arrange(desc(n))
+
+wordcloud <- wordcloud2::wordcloud2(data = test[, .(ngram, n)])
+wordcloud
+htmlwidgets::saveWidget(wordcloud, "wordcloudTrigram.html", selfcontained = FALSE)
+webshot::webshot("wordcloudTrigram.html", "wordcloudTrigram.png", delay = 10)
+```
+
+
+
+
+
+
+
+
+
 
