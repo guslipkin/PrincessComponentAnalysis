@@ -197,6 +197,7 @@ topWords[indx <= 10L & song == FALSE] %>%
   scale_fill_manual(values = movieColors[topWords$movie]) +
   scale_y_reordered() +
   labs(title = "Top ten most common spoken words by movie")
+ggsave("topTenSpoken.png")
 
 topWords[indx <= 10L & song == TRUE] %>%
   .[, word := reorder_within(word, count, movie)] %>%
@@ -210,6 +211,7 @@ topWords[indx <= 10L & song == TRUE] %>%
   scale_y_reordered() +
   labs(title = "Top ten most common sung words by movie",
        subtitle = "Note: Brave does not have any foreground songs")
+ggsave("topTenSung.png")
 
 # word cloud is still a work in progress
 # topWords[indx <= 5L] %>%
