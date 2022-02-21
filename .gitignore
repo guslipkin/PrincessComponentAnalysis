@@ -42,4 +42,4 @@ vignettes/*.pdf
 MovieSubtitles/.DS_Store
 nrcRules.csv
 MovieSubtitles/.DS_Store
-**/.DS_Store
+*.DS_Store

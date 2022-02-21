@@ -133,9 +133,9 @@ animated[sample(1:.N, size = 6)]
 
 ```{r}
 # get sentiments now so we don't have to keep doing it later
-afinn <- fread("afinn.csv")
-bing <- fread("bing.csv")
-nrc <- fread("nrc.csv")
+afinn <- fread("Lexicons/afinn.csv")
+bing <- fread("Lexicons/bing.csv")
+nrc <- fread("Lexicons/nrc.csv")
 
 nrcSentiments <- unique(nrc$sentiment)
 nrcSentimentsNoPosNeg <- nrcSentiments[-3][-6]
@@ -197,21 +197,25 @@ topWords[indx <= 10L & song == FALSE] %>%
   scale_fill_manual(values = movieColors[topWords$movie]) +
   scale_y_reordered() +
   labs(title = "Top ten most common spoken words by movie")
-ggsave("topTenSpoken.png")
+ggsave("Graphics/topTenSpoken.png")
 
 topWords[indx <= 10L & song == TRUE] %>%
+  .[, Duplicated := duplicated(word)] %>%
   .[, word := reorder_within(word, count, movie)] %>%
   ggplot() +
-  geom_col(aes(x = count, y = word, fill = movie), color = "black") +
+  geom_col(aes(x = count, y = word, fill = movie, linetype = Duplicated), color = "black") +
   guides(fill = "none") +
   labs(x = NULL, y = NULL) +
   facet_wrap(~movie, scales = "free_y") +
   theme_minimal() +
   scale_fill_manual(values = movieColors[topWords$movie]) +
   scale_y_reordered() +
+  theme(legend.position = c(.875, .125),
+        axis.title.y = element_blank()) +
   labs(title = "Top ten most common sung words by movie",
-       subtitle = "Note: Brave does not have any foreground songs")
-ggsave("topTenSung.png")
+       subtitle = "Note: Brave does not have any foreground songs",
+       x = "Word occurences per movie")
+ggsave("Graphics/topTenSung.png")
 
 # word cloud is still a work in progress
 # topWords[indx <= 5L] %>%
@@ -249,7 +253,7 @@ tmp %>%
         axis.title.x = element_blank(),
         axis.title.y = element_blank()) +
   labs(title = "NRC emotions over the course of the movie")
-ggsave("nrcOverMovie.png")
+ggsave("Graphics/nrcOverMovie.png")
 ```
 
 
@@ -283,7 +287,7 @@ tmp %>%
   ylab(label = "afinn Lexicon Value") +
   facet_wrap(~movie) +
   scale_fill_manual(values = movieColors[tmp$movie])
-ggsave("violinPlotLines.png")
+ggsave("Graphics/violinPlotLines.png")
 
 
 # by word
@@ -312,7 +316,7 @@ tmp %>%
   ylab(label = "afinn Lexicon Value") +
   facet_wrap(~movie) +
   scale_fill_manual(values = movieColors[tmp$movie])
-ggsave("violinPlotWords.png")
+ggsave("Graphics/violinPlotWords.png")
 ```
 
 
@@ -327,13 +331,20 @@ aniAfinnWordLonger[,
 
 # gets sentiments, counts the number of positive and negative per movie,
 #   then gets a total by finding the difference
-unique(aniBingWordLonger[,
-                         n := .N,
-                         by = .(movie, sentiment)][,
-                                                   .(movie, sentiment,
-                                                     n)][order(movie, sentiment)]) %>%
-  pivot_wider(names_from = sentiment, id_cols = c("movie", "n"), values_from = n) %>%
-  data.table() %>%
+# unique(aniBingWordLonger[,
+#                          n := .N,
+#                          by = .(movie, sentiment)][,
+#                                                    .(movie, sentiment,
+#                                                      n)][order(movie, sentiment)]) %>%
+#   pivot_wider(names_from = sentiment, id_cols = c("movie", "n"), values_from = n) %>%
+#   data.table() %>%
+#   .[, totalSentiment := positive - negative] %>%
+#   .[order(desc(totalSentiment))] %>%
+#   print()
+
+aniBingWordLonger[, n := .N, by = .(movie, sentiment)] %>%
+  .[, .(movie, sentiment, n)] %>%
+  dcast(., movie ~ sentiment, value.var = "n") %>%
   .[, totalSentiment := positive - negative] %>%
   .[order(desc(totalSentiment))] %>%
   print()
@@ -343,9 +354,16 @@ unique(aniBingWordLonger[,
 #   and adds up the total number of sentiments (not including `negative` and `positive` 
 #   to create `totalFeeling`
 
-aniNrcMovieWider <- aniNrcWordLonger[, .(n = .N), by = .(movie, sentiment)][
-                                                  order(movie, sentiment)] %>%
-  pivot_wider(names_from = sentiment, id_cols = c("movie", "n"), values_from = n) %>%
+# aniNrcMovieWider <- aniNrcWordLonger[, .(n = .N), by = .(movie, sentiment)][
+#                                                   order(movie, sentiment)] %>%
+#   pivot_wider(names_from = sentiment, id_cols = c("movie", "n"), values_from = n) %>%
+#   rowwise() %>%
+#   mutate(totalSentiment = positive - negative,
+#          totalFeeling = sum(c_across(c(2:6, 9:11)))) %>%
+#   data.table()
+
+aniNrcMovieWider <- aniNrcWordLonger[, .(n = .N), by = .(movie, sentiment)] %>%
+  dcast(., movie ~ sentiment, value.var = "n") %>%
   rowwise() %>%
   mutate(totalSentiment = positive - negative,
          totalFeeling = sum(c_across(c(2:6, 9:11)))) %>%
@@ -377,7 +395,7 @@ movieData[aniNrcMovieWider, on = "movie"] %>%
   xlab("Year of Movie Release") +
   ylab("Aggregate Sentiments and Feelings From nrc Lexicon") +
   labs(title = "Checking to see if total feeling changed over time")
-ggsave("sentimentsByYear.png")
+ggsave("Graphics/sentimentsByYear.png")
 ```
 
 ```{r, eval=FALSE}
@@ -440,7 +458,7 @@ data.table("sentiment" = rownames(nrcPCA$rotation), nrcPCA$rotation) %>%
        fill = "Principal\nComponent") +
   xlab("Sentiment") +
   ylab("Proportion of Principal Component")
-ggsave("PCA.png")
+ggsave("Graphics/PCA.png")
 ```
 
 ```{r, eval=FALSE}
@@ -521,8 +539,8 @@ wordcloud <- wordcloud2::wordcloud2(data = topics[, .(word, N)],
                        color = gplots::col2hex(as.character(movieColors[topics$movie]))
                        )
 wordcloud
-htmlwidgets::saveWidget(wordcloud, "wordcloud.html", selfcontained = FALSE)
-webshot::webshot("wordcloud.html", "wordcloud.png", delay = 10)
+htmlwidgets::saveWidget(wordcloud, "Graphics/wordcloud.html", selfcontained = FALSE)
+webshot::webshot("Graphics/wordcloud.html", "Graphics/wordcloud.png", delay = 10)
 ```
 
 ```{r}
@@ -572,8 +590,8 @@ test <- test %>%
 
 wordcloud <- wordcloud2::wordcloud2(data = test[, .(ngram, n)])
 wordcloud
-htmlwidgets::saveWidget(wordcloud, "wordcloudTrigram.html", selfcontained = FALSE)
-webshot::webshot("wordcloudTrigram.html", "wordcloudTrigram.png", delay = 10)
+htmlwidgets::saveWidget(wordcloud, "Graphics/wordcloudTrigram.html", selfcontained = FALSE)
+webshot::webshot("Graphics/wordcloudTrigram.html", "Graphics/wordcloudTrigram.png", delay = 10)
 ```
 
 
